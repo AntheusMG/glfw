@@ -129,6 +129,8 @@ struct wl_output;
 #define xdg_surface_interface _glfw_xdg_surface_interface
 #define xdg_toplevel_interface _glfw_xdg_toplevel_interface
 #define xdg_wm_base_interface _glfw_xdg_wm_base_interface
+#define xdg_activation_v1_interface _glfw_xdg_activation_v1_interface
+#define xdg_activation_token_v1_interface _glfw_xdg_activation_token_v1_interface
 
 #define GLFW_WAYLAND_WINDOW_STATE         _GLFWwindowWayland  wl;
 #define GLFW_WAYLAND_LIBRARY_WINDOW_STATE _GLFWlibraryWayland wl;
@@ -321,21 +323,12 @@ typedef void (* PFN_libdecor_state_free)(struct libdecor_state*);
 #define libdecor_state_new _glfw.wl.libdecor.libdecor_state_new_
 #define libdecor_state_free _glfw.wl.libdecor.libdecor_state_free_
 
-typedef enum _GLFWdecorationSideWayland
-{
-    GLFW_MAIN_WINDOW,
-    GLFW_TOP_DECORATION,
-    GLFW_LEFT_DECORATION,
-    GLFW_RIGHT_DECORATION,
-    GLFW_BOTTOM_DECORATION
-} _GLFWdecorationSideWayland;
-
-typedef struct _GLFWdecorationWayland
+typedef struct _GLFWfallbackEdgeWayland
 {
     struct wl_surface*          surface;
     struct wl_subsurface*       subsurface;
     struct wp_viewport*         viewport;
-} _GLFWdecorationWayland;
+} _GLFWfallbackEdgeWayland;
 
 typedef struct _GLFWofferWayland
 {
@@ -347,7 +340,7 @@ typedef struct _GLFWofferWayland
 typedef struct _GLFWscaleWayland
 {
     struct wl_output*           output;
-    int                         factor;
+    int32_t                     factor;
 } _GLFWscaleWayland;
 
 // Wayland-specific per-window data
@@ -355,6 +348,7 @@ typedef struct _GLFWscaleWayland
 typedef struct _GLFWwindowWayland
 {
     int                         width, height;
+    int                         fbWidth, fbHeight;
     GLFWbool                    visible;
     GLFWbool                    maximized;
     GLFWbool                    activated;
@@ -385,7 +379,6 @@ typedef struct _GLFWwindowWayland
 
     struct {
         struct libdecor_frame*  frame;
-        int                     mode;
     } libdecor;
 
     _GLFWcursor*                currentCursor;
@@ -396,22 +389,24 @@ typedef struct _GLFWwindowWayland
 
     // We need to track the monitors the window spans on to calculate the
     // optimal scaling factor.
-    int                         contentScale;
-    _GLFWscaleWayland*          scales;
-    int                         scaleCount;
-    int                         scaleSize;
+    int32_t                     bufferScale;
+    _GLFWscaleWayland*          outputScales;
+    size_t                      outputScaleCount;
+    size_t                      outputScaleSize;
 
     struct zwp_relative_pointer_v1* relativePointer;
     struct zwp_locked_pointer_v1*   lockedPointer;
     struct zwp_confined_pointer_v1* confinedPointer;
 
-    struct zwp_idle_inhibitor_v1*          idleInhibitor;
+    struct zwp_idle_inhibitor_v1*   idleInhibitor;
+    struct xdg_activation_token_v1* activationToken;
 
     struct {
-        struct wl_buffer*                  buffer;
-        _GLFWdecorationWayland             top, left, right, bottom;
-        _GLFWdecorationSideWayland         focus;
-    } decorations;
+        GLFWbool                    decorations;
+        struct wl_buffer*           buffer;
+        _GLFWfallbackEdgeWayland    top, left, right, bottom;
+        struct wl_surface*          focus;
+    } fallback;
 } _GLFWwindowWayland;
 
 // Wayland-specific global data
@@ -434,6 +429,7 @@ typedef struct _GLFWlibraryWayland
     struct zwp_relative_pointer_manager_v1* relativePointerManager;
     struct zwp_pointer_constraints_v1*      pointerConstraints;
     struct zwp_idle_inhibit_manager_v1*     idleInhibitManager;
+    struct xdg_activation_v1*               activationManager;
 
     _GLFWofferWayland*          offers;
     unsigned int                offerCount;
@@ -590,7 +586,7 @@ typedef struct _GLFWmonitorWayland
 
     int                         x;
     int                         y;
-    int                         contentScale;
+    int32_t                     scale;
 } _GLFWmonitorWayland;
 
 // Wayland-specific per-cursor data
@@ -681,7 +677,7 @@ GLFWbool _glfwGetGammaRampWayland(_GLFWmonitor* monitor, GLFWgammaramp* ramp);
 void _glfwSetGammaRampWayland(_GLFWmonitor* monitor, const GLFWgammaramp* ramp);
 
 void _glfwAddOutputWayland(uint32_t name, uint32_t version);
-void _glfwUpdateContentScaleWayland(_GLFWwindow* window);
+void _glfwUpdateBufferScaleFromOutputsWayland(_GLFWwindow* window);
 
 void _glfwAddSeatListenerWayland(struct wl_seat* seat);
 void _glfwAddDataDeviceListenerWayland(struct wl_data_device* device);
